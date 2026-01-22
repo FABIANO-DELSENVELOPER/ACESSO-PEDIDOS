@@ -22,4 +22,5 @@ jobs:
           fi
           curl --fail --silent --show-error \
             -H "Authorization: Bearer $CRON_SECRET" \
+            -H "X-Cron-Secret: $CRON_SECRET" \
             "$BASE_URL/api/ops/pedidos/gestor/sync"
