@@ -219,7 +219,16 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  if (!authOk(req)) return bad("Nao autorizado", 401);
+  if (!authOk(req)) {
+    const authHeader = req.headers.get("authorization");
+    const cronHeader = req.headers.get("x-cron-secret");
+    console.warn("cron auth failed", {
+      hasAuthHeader: Boolean(authHeader),
+      hasCronHeader: Boolean(cronHeader),
+      hasEnvSecret: Boolean(String(process.env.CRON_SECRET || "").trim()),
+    });
+    return bad("Nao autorizado", 401);
+  }
 
   try {
     const dateStr = todayPtBR();
