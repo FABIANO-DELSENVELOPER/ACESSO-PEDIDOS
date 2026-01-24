@@ -14,10 +14,19 @@ function isPublicPath(pathname: string) {
   return false;
 }
 
+function isCronAuthorized(req: NextRequest) {
+  const secret = String(process.env.CRON_SECRET || "").trim();
+  if (!secret) return false;
+  const auth = req.headers.get("authorization") || "";
+  const headerSecret = req.headers.get("x-cron-secret") || "";
+  return auth === `Bearer ${secret}` || headerSecret === secret;
+}
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (isPublicPath(pathname)) return NextResponse.next();
+  if (isCronAuthorized(req)) return NextResponse.next();
 
   const token = req.cookies.get(cookieName())?.value || null;
   const v = await verifySession(token);
