@@ -145,6 +145,9 @@ async function fetchWithCookies(
   jar: CookieJar,
   maxRedirects = 5
 ): Promise<{ res: Response; finalUrl: string }> {
+  const proxyUrl = String(process.env.GESTOR_PROXY_URL || "").trim();
+  const proxySecret = String(process.env.GESTOR_PROXY_SECRET || "").trim();
+  const useProxy = Boolean(proxyUrl);
   let currentUrl = url;
   let method = init.method || "GET";
   let body = init.body;
@@ -153,10 +156,16 @@ async function fetchWithCookies(
     const headers = new Headers(init.headers || {});
     const cookie = cookieHeader(jar);
     if (cookie) headers.set("cookie", cookie);
+    if (useProxy && proxySecret) headers.set("x-proxy-secret", proxySecret);
 
     let res: Response;
     try {
-      res = await fetch(currentUrl, {
+      const fetchUrl = useProxy
+        ? `${proxyUrl}${proxyUrl.includes("?") ? "&" : "?"}url=${encodeURIComponent(
+            currentUrl
+          )}`
+        : currentUrl;
+      res = await fetch(fetchUrl, {
         ...init,
         method,
         body,
