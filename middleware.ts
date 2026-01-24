@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { proxy } from "@/proxy";
+import { proxy } from "./proxy";
 
 const CRON_PATH = "/api/ops/pedidos/gestor/sync";
 
