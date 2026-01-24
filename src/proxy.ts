@@ -33,6 +33,12 @@ export async function proxy(req: NextRequest) {
 
   if (!v.ok) {
     if (pathname.startsWith("/api/")) {
+      console.warn("proxy auth failed", {
+        pathname,
+        hasAuthHeader: Boolean(req.headers.get("authorization")),
+        hasCronHeader: Boolean(req.headers.get("x-cron-secret")),
+        hasEnvSecret: Boolean(String(process.env.CRON_SECRET || "").trim()),
+      });
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
     const url = req.nextUrl.clone();
