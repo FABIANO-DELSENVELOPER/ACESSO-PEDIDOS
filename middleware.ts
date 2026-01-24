@@ -5,7 +5,8 @@ import { proxy } from "./proxy";
 const CRON_PATH = "/api/ops/pedidos/gestor/sync";
 
 export async function middleware(req: NextRequest) {
-  if (req.nextUrl.pathname === CRON_PATH) {
+  const pathname = req.nextUrl.pathname;
+  if (pathname === CRON_PATH || pathname.startsWith(`${CRON_PATH}/`)) {
     return NextResponse.next();
   }
   return proxy(req);
