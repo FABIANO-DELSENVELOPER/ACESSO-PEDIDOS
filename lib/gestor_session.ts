@@ -317,6 +317,26 @@ export async function loginGestor(force = false): Promise<{
     : !postFinalUrl.includes("/login");
 
   if (!looksLoggedIn) {
+    // Alguns logins retornam 200 com JS/redirect sem mudar a URL.
+    try {
+      const abrirUrl = new URL("/sistema/app/abrir/", loginFinalUrl).toString();
+      const { res: abrirRes, finalUrl: abrirFinalUrl } = await fetchWithCookies(
+        abrirUrl,
+        { method: "GET", headers: { "user-agent": "Mozilla/5.0" } },
+        jar
+      );
+      if (abrirRes.ok && !abrirFinalUrl.includes("/login")) {
+        cachedSession = { cookies: jar, createdAt: Date.now() };
+        await saveSessionToDb(cachedSession);
+        return {
+          ok: true,
+          message: "Login OK (via /abrir)",
+          finalUrl: abrirFinalUrl,
+        };
+      }
+    } catch {
+      // fall through to error below
+    }
     return {
       ok: false,
       message: "Login aparentemente falhou (ainda em /login).",
