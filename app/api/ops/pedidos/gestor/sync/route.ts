@@ -231,7 +231,8 @@ export async function GET(req: Request) {
   }
 
   try {
-    const dateStr = todayPtBR();
+    const url = new URL(req.url);
+    const dateStr = String(url.searchParams.get("date") || "").trim() || todayPtBR();
     const login = await loginGestor(false);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
