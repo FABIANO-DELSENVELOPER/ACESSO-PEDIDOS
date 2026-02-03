@@ -55,6 +55,126 @@ function buildPrepareFields(raw: string | null, vars: Record<string, string>): R
   }
 }
 
+function parseTagAttrs(tag: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const re = /(\w+)\s*=\s*["']([^"']*)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(tag))) {
+    attrs[m[1].toLowerCase()] = m[2];
+  }
+  return attrs;
+}
+
+function parseFormValuesFromHtml(html: string, formId = "form1"): Record<string, string> {
+  const out: Record<string, string> = {};
+  const formRe = new RegExp(
+    `<form[^>]*id=["']${formId}["'][^>]*>([\\s\\S]*?)<\\/form>`,
+    "i"
+  );
+  const formMatch = html.match(formRe);
+  const scope = formMatch ? formMatch[1] : html;
+
+  const inputTags = scope.match(/<input\\b[^>]*>/gi) || [];
+  for (const tag of inputTags) {
+    const attrs = parseTagAttrs(tag);
+    const name = attrs.name;
+    if (!name) continue;
+    const type = (attrs.type || "text").toLowerCase();
+    if ((type === "radio" || type === "checkbox") && !/\\bchecked\\b/i.test(tag)) {
+      continue;
+    }
+    out[name] = attrs.value ?? "";
+  }
+
+  const selectRe = /<select\\b[^>]*name=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/select>/gi;
+  let sm: RegExpExecArray | null;
+  while ((sm = selectRe.exec(scope))) {
+    const name = sm[1];
+    const body = sm[2] || "";
+    const options = [...body.matchAll(/<option\\b[^>]*>([\\s\\S]*?)<\\/option>/gi)];
+    let selectedVal: string | null = null;
+    if (options.length > 0) {
+      for (const opt of options) {
+        const tag = opt[0];
+        const attrs = parseTagAttrs(tag);
+        if (/\\bselected\\b/i.test(tag)) {
+          selectedVal = attrs.value ?? opt[1]?.trim() ?? "";
+          break;
+        }
+      }
+      if (selectedVal === null) {
+        const firstTag = options[0][0];
+        const attrs = parseTagAttrs(firstTag);
+        selectedVal = attrs.value ?? options[0][1]?.trim() ?? "";
+      }
+    }
+    out[name] = selectedVal ?? "";
+  }
+
+  return out;
+}
+
+function xajaxEscape(data: string): string {
+  if (typeof data !== "string") return String(data ?? "");
+  const needCDATA = encodeURIComponent(data) !== data;
+  if (!needCDATA) return data;
+  const segments = data.split("<![CDATA[");
+  const rebuilt: string[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const frags = segments[i].split("]]>");
+    let segment = "";
+    for (let j = 0; j < frags.length; j++) {
+      if (j !== 0) segment += "]]]]><![CDATA[>";
+      segment += frags[j];
+    }
+    if (i !== 0) rebuilt.push("<![]]><![CDATA[CDATA[");
+    rebuilt.push(segment);
+  }
+  const merged = rebuilt.join("");
+  return `<![CDATA[${merged}]]>`;
+}
+
+function xajaxObjectToXml(obj: Record<string, any>): string {
+  const maxDepth = 20;
+  const maxSize = 2000;
+  const guard = { depth: 0, maxDepth, size: 0, maxSize };
+  const toXml = (o: any): string => {
+    const parts: string[] = [];
+    parts.push("<xjxobj>");
+    for (const key of Object.keys(o || {})) {
+      guard.size += 1;
+      if (guard.maxSize < guard.size) return parts.join("");
+      const val = o[key];
+      if (typeof val === "undefined") continue;
+      if (key === "constructor") continue;
+      if (typeof val === "function") continue;
+      parts.push("<e><k>", xajaxEscape(String(key)), "</k><v>");
+      if (val && typeof val === "object") {
+        guard.depth += 1;
+        if (guard.maxDepth > guard.depth) {
+          parts.push(toXml(val));
+        }
+        guard.depth -= 1;
+      } else {
+        const v = xajaxEscape(String(val ?? ""));
+        if (v === "undefined" || v === "null") {
+          parts.push("*");
+        } else {
+          const t = typeof val;
+          if (t === "string") parts.push("S");
+          else if (t === "boolean") parts.push("B");
+          else if (t === "number") parts.push("N");
+          parts.push(v);
+        }
+      }
+      parts.push("</v></e>");
+    }
+    parts.push("</xjxobj>");
+    return parts.join("");
+  };
+  return toXml(obj);
+}
+
 async function fetchRelatorio20Xlsx(dateStr: string): Promise<Buffer> {
   const relatorioUrl = envOrDefault(
     "GESTOR_RELATORIO_URL",
@@ -73,28 +193,48 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<Buffer> {
   const prepareFields = buildPrepareFields(rawPrepareFields, vars);
   const baseHeaders = { "user-agent": "Mozilla/5.0" };
 
-  await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
+  const { res: relRes } = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
+  const relHtml = await relRes.text();
 
   if (Object.keys(prepareFields).length > 0) {
-    const params = new URLSearchParams(prepareFields);
-    const target =
-      prepareMethod === "GET"
-        ? `${prepareUrl}${prepareUrl.includes("?") ? "&" : "?"}${params.toString()}`
-        : prepareUrl;
+    if (prepareMethod === "XAJAX") {
+      const defaults = parseFormValuesFromHtml(relHtml, "form1");
+      const formValues = { ...defaults, ...prepareFields };
+      const xml = xajaxObjectToXml(formValues);
+      const params = new URLSearchParams();
+      params.set("xjxfun", "Relatorio");
+      params.set("xjxr", String(Date.now()));
+      params.append("xjxargs[]", xml);
+      await fetchGestorWithSession(prepareUrl, {
+        method: "POST",
+        headers: {
+          ...baseHeaders,
+          referer: relatorioUrl,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: params.toString(),
+      });
+    } else {
+      const params = new URLSearchParams(prepareFields);
+      const target =
+        prepareMethod === "GET"
+          ? `${prepareUrl}${prepareUrl.includes("?") ? "&" : "?"}${params.toString()}`
+          : prepareUrl;
 
-    const init: RequestInit = {
-      method: prepareMethod,
-      headers: {
-        ...baseHeaders,
-        referer: relatorioUrl,
-        ...(prepareMethod === "GET"
-          ? {}
-          : { "content-type": "application/x-www-form-urlencoded" }),
-      },
-      body: prepareMethod === "GET" ? undefined : params.toString(),
-    };
+      const init: RequestInit = {
+        method: prepareMethod,
+        headers: {
+          ...baseHeaders,
+          referer: relatorioUrl,
+          ...(prepareMethod === "GET"
+            ? {}
+            : { "content-type": "application/x-www-form-urlencoded" }),
+        },
+        body: prepareMethod === "GET" ? undefined : params.toString(),
+      };
 
-    await fetchGestorWithSession(target, init);
+      await fetchGestorWithSession(target, init);
+    }
   }
 
   const { res } = await fetchGestorWithSession(exportUrl, {
