@@ -228,7 +228,22 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<{
   if (Object.keys(prepareFields).length > 0) {
     if (prepareMethod === "XAJAX") {
       const defaults = parseFormValuesFromHtml(relHtml, "form1");
-      const formValues = { ...defaults, ...prepareFields };
+      const fallbackDefaults: Record<string, string> = {
+        nCodigo_Relatorio: "20",
+        fcodigo_selecionado: "",
+        "c.id": "0",
+        peddatped: "",
+        peddatped_fim: "",
+        "v.id": "0",
+        vcpdatvct: "",
+        vcpdatvct_fim: "",
+        pedorcped: "0",
+        PEDDATENT: "",
+        PEDDATENT_fim: "",
+        wkflgrel: "0",
+        fcampo_quebra: "coligada",
+      };
+      const formValues = { ...fallbackDefaults, ...defaults, ...prepareFields };
       const xml = xajaxObjectToXml(formValues);
       const params = new URLSearchParams();
       params.set("xjxfun", "Relatorio");
