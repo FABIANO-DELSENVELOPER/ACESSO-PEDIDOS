@@ -369,14 +369,16 @@ export async function POST(req: Request) {
     const pedidos = parseRelatorio20Xlsx(buffer);
     if (pedidos.length === 0) {
       const sig = buffer.subarray(0, 4).toString("hex");
-      const debugRows = (() => {
+      const debug = (() => {
         try {
           const wb = read(buffer, { type: "buffer", cellDates: false });
-          const name = wb.SheetNames[0];
-          const sheet = name ? wb.Sheets[name] : null;
-          if (!sheet) return [];
-          const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
-          return rows.slice(0, 6);
+          const sheetInfo = wb.SheetNames.map((name) => {
+            const sheet = wb.Sheets[name];
+            if (!sheet) return { name, rows: 0 };
+            const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
+            return { name, rows: rows.length, sample: rows.slice(0, 6) };
+          });
+          return sheetInfo;
         } catch {
           return [];
         }
@@ -388,7 +390,7 @@ export async function POST(req: Request) {
         prepareMethod,
         prepareFields: Object.keys(prepareFields || {}),
         relMeta,
-        debugRows,
+        debug,
       });
     }
 
@@ -438,14 +440,16 @@ export async function GET(req: Request) {
     const pedidos = parseRelatorio20Xlsx(buffer);
     if (pedidos.length === 0) {
       const sig = buffer.subarray(0, 4).toString("hex");
-      const debugRows = (() => {
+      const debug = (() => {
         try {
           const wb = read(buffer, { type: "buffer", cellDates: false });
-          const name = wb.SheetNames[0];
-          const sheet = name ? wb.Sheets[name] : null;
-          if (!sheet) return [];
-          const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
-          return rows.slice(0, 6);
+          const sheetInfo = wb.SheetNames.map((name) => {
+            const sheet = wb.Sheets[name];
+            if (!sheet) return { name, rows: 0 };
+            const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
+            return { name, rows: rows.length, sample: rows.slice(0, 6) };
+          });
+          return sheetInfo;
         } catch {
           return [];
         }
@@ -457,7 +461,7 @@ export async function GET(req: Request) {
         prepareMethod,
         prepareFields: Object.keys(prepareFields || {}),
         relMeta,
-        debugRows,
+        debug,
       });
     }
 
