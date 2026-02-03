@@ -182,7 +182,13 @@ function xajaxObjectToXml(obj: Record<string, any>): string {
   return toXml(obj);
 }
 
-async function fetchRelatorio20Xlsx(dateStr: string): Promise<{ buffer: Buffer; contentType: string | null }> {
+async function fetchRelatorio20Xlsx(dateStr: string): Promise<{
+  buffer: Buffer;
+  contentType: string | null;
+  relMeta: { hasForm1: boolean; hasXajax: boolean; looksLikeLogin: boolean };
+  prepareMethod: string;
+  prepareFields: Record<string, string>;
+}> {
   const relatorioUrl = envOrDefault(
     "GESTOR_RELATORIO_URL",
     "https://www.gestorsistemas.inf.br/sistema/app/relatorio/?nCodigo_Relatorio=20"
@@ -269,7 +275,13 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<{ buffer: Buffer; 
   }
 
   const buf = Buffer.from(await res.arrayBuffer());
-  return { buffer: buf, contentType: res.headers.get("content-type") };
+  return {
+    buffer: buf,
+    contentType: res.headers.get("content-type"),
+    relMeta,
+    prepareMethod,
+    prepareFields,
+  };
 }
 
 async function importPedidos(pedidos: RelatorioPedido[]) {
@@ -352,7 +364,7 @@ export async function POST(req: Request) {
     const login = await loginGestor(false);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
-    const { buffer, contentType } = await fetchRelatorio20Xlsx(dateStr);
+  const { buffer, contentType, relMeta, prepareMethod, prepareFields } = await fetchRelatorio20Xlsx(dateStr);
     const pedidos = parseRelatorio20Xlsx(buffer);
     if (pedidos.length === 0) {
       const sig = buffer.subarray(0, 4).toString("hex");
@@ -408,7 +420,7 @@ export async function GET(req: Request) {
     const login = await loginGestor(false);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
-    const { buffer, contentType } = await fetchRelatorio20Xlsx(dateStr);
+    const { buffer, contentType, relMeta, prepareMethod, prepareFields } = await fetchRelatorio20Xlsx(dateStr);
     const pedidos = parseRelatorio20Xlsx(buffer);
     if (pedidos.length === 0) {
       const sig = buffer.subarray(0, 4).toString("hex");
