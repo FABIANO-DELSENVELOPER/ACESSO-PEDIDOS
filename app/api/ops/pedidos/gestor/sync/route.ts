@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/ops_guard";
 import { ajustarClienteVendaAoConsumidor } from "@/lib/obs_parse";
 import { fetchGestorWithSession, loginGestor } from "@/lib/gestor_session";
 import { parseRelatorio20Xlsx, type RelatorioPedido } from "@/lib/gestor_relatorio";
+import { read, utils } from "xlsx";
 
 export const runtime = "nodejs";
 
@@ -368,6 +369,18 @@ export async function POST(req: Request) {
     const pedidos = parseRelatorio20Xlsx(buffer);
     if (pedidos.length === 0) {
       const sig = buffer.subarray(0, 4).toString("hex");
+      const debugRows = (() => {
+        try {
+          const wb = read(buffer, { type: "buffer", cellDates: false });
+          const name = wb.SheetNames[0];
+          const sheet = name ? wb.Sheets[name] : null;
+          if (!sheet) return [];
+          const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
+          return rows.slice(0, 6);
+        } catch {
+          return [];
+        }
+      })();
       return bad("Relatorio vazio ou layout desconhecido", 422, {
         contentType,
         bufferSize: buffer.length,
@@ -375,6 +388,7 @@ export async function POST(req: Request) {
         prepareMethod,
         prepareFields: Object.keys(prepareFields || {}),
         relMeta,
+        debugRows,
       });
     }
 
@@ -424,6 +438,18 @@ export async function GET(req: Request) {
     const pedidos = parseRelatorio20Xlsx(buffer);
     if (pedidos.length === 0) {
       const sig = buffer.subarray(0, 4).toString("hex");
+      const debugRows = (() => {
+        try {
+          const wb = read(buffer, { type: "buffer", cellDates: false });
+          const name = wb.SheetNames[0];
+          const sheet = name ? wb.Sheets[name] : null;
+          if (!sheet) return [];
+          const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
+          return rows.slice(0, 6);
+        } catch {
+          return [];
+        }
+      })();
       return bad("Relatorio vazio ou layout desconhecido", 422, {
         contentType,
         bufferSize: buffer.length,
@@ -431,6 +457,7 @@ export async function GET(req: Request) {
         prepareMethod,
         prepareFields: Object.keys(prepareFields || {}),
         relMeta,
+        debugRows,
       });
     }
 
