@@ -202,7 +202,7 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<{ buffer: Buffer; 
 
   let { res: relRes } = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
   let relHtml = await relRes.text();
-  if (/input_usuario|login-form|\\/app\\/login\\//i.test(relHtml)) {
+  if (new RegExp("input_usuario|login-form|/app/login/", "i").test(relHtml)) {
     // sessão expirada/invalidada: força novo login e tenta de novo
     await loginGestor(true);
     const retry = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
