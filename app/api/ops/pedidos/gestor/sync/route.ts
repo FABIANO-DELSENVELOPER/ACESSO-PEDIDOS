@@ -200,8 +200,15 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<{ buffer: Buffer; 
   const prepareFields = buildPrepareFields(rawPrepareFields, vars);
   const baseHeaders = { "user-agent": "Mozilla/5.0" };
 
-  const { res: relRes } = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
-  const relHtml = await relRes.text();
+  let { res: relRes } = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
+  let relHtml = await relRes.text();
+  if (/input_usuario|login-form|\\/app\\/login\\//i.test(relHtml)) {
+    // sessão expirada/invalidada: força novo login e tenta de novo
+    await loginGestor(true);
+    const retry = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
+    relRes = retry.res;
+    relHtml = await relRes.text();
+  }
 
   if (Object.keys(prepareFields).length > 0) {
     if (prepareMethod === "XAJAX") {
