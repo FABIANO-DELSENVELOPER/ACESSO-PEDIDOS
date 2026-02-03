@@ -74,30 +74,37 @@ function parseFormValuesFromHtml(html: string, formId = "form1"): Record<string,
   const formMatch = html.match(formRe);
   const scope = formMatch ? formMatch[1] : html;
 
-  const inputTags = scope.match(/<input\\b[^>]*>/gi) || [];
+  const inputTags = scope.match(new RegExp("<input\\\\b[^>]*>", "gi")) || [];
   for (const tag of inputTags) {
     const attrs = parseTagAttrs(tag);
     const name = attrs.name;
     if (!name) continue;
     const type = (attrs.type || "text").toLowerCase();
-    if ((type === "radio" || type === "checkbox") && !/\\bchecked\\b/i.test(tag)) {
+    if ((type === "radio" || type === "checkbox") && !new RegExp("\\\\bchecked\\\\b", "i").test(tag)) {
       continue;
     }
     out[name] = attrs.value ?? "";
   }
 
-  const selectRe = /<select\\b[^>]*name=["']([^"']+)["'][^>]*>([\\s\\S]*?)<\\/select>/gi;
+  const selectRe = new RegExp(
+    "<select\\\\b[^>]*name=[\"']([^\"']+)[\"'][^>]*>([\\\\s\\\\S]*?)<\\\\/select>",
+    "gi"
+  );
   let sm: RegExpExecArray | null;
   while ((sm = selectRe.exec(scope))) {
     const name = sm[1];
     const body = sm[2] || "";
-    const options = [...body.matchAll(/<option\\b[^>]*>([\\s\\S]*?)<\\/option>/gi)];
+    const options = [
+      ...body.matchAll(
+        new RegExp("<option\\\\b[^>]*>([\\\\s\\\\S]*?)<\\\\/option>", "gi")
+      ),
+    ];
     let selectedVal: string | null = null;
     if (options.length > 0) {
       for (const opt of options) {
         const tag = opt[0];
         const attrs = parseTagAttrs(tag);
-        if (/\\bselected\\b/i.test(tag)) {
+        if (new RegExp("\\\\bselected\\\\b", "i").test(tag)) {
           selectedVal = attrs.value ?? opt[1]?.trim() ?? "";
           break;
         }
