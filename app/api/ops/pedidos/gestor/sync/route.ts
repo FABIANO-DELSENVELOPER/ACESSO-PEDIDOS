@@ -362,7 +362,7 @@ export async function POST(req: Request) {
   const limit = Math.max(0, Number(body?.limit || 0));
 
   try {
-    const login = await loginGestor(false);
+    const login = await loginGestor(true);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
   const { buffer, contentType, relMeta, prepareMethod, prepareFields } = await fetchRelatorio20Xlsx(dateStr);
@@ -431,7 +431,7 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const dateStr = String(url.searchParams.get("date") || "").trim() || todayPtBR();
-    const login = await loginGestor(false);
+    const login = await loginGestor(true);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
     const { buffer, contentType, relMeta, prepareMethod, prepareFields } = await fetchRelatorio20Xlsx(dateStr);
