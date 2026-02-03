@@ -202,12 +202,20 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<{ buffer: Buffer; 
 
   let { res: relRes } = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
   let relHtml = await relRes.text();
-  if (new RegExp("input_usuario|login-form|/app/login/", "i").test(relHtml)) {
+  const relMeta = {
+    hasForm1: /<form[^>]*id=['"]form1['"]/i.test(relHtml),
+    hasXajax: /xajax_Relatorio|xajax\\.config/i.test(relHtml),
+    looksLikeLogin: new RegExp("input_usuario|login-form|/app/login/", "i").test(relHtml),
+  };
+  if (relMeta.looksLikeLogin) {
     // sessão expirada/invalidada: força novo login e tenta de novo
     await loginGestor(true);
     const retry = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
     relRes = retry.res;
     relHtml = await relRes.text();
+    relMeta.hasForm1 = /<form[^>]*id=['"]form1['"]/i.test(relHtml);
+    relMeta.hasXajax = /xajax_Relatorio|xajax\\.config/i.test(relHtml);
+    relMeta.looksLikeLogin = new RegExp("input_usuario|login-form|/app/login/", "i").test(relHtml);
   }
 
   if (Object.keys(prepareFields).length > 0) {
@@ -352,6 +360,9 @@ export async function POST(req: Request) {
         contentType,
         bufferSize: buffer.length,
         sig,
+        prepareMethod,
+        prepareFields: Object.keys(prepareFields || {}),
+        relMeta,
       });
     }
 
@@ -405,6 +416,9 @@ export async function GET(req: Request) {
         contentType,
         bufferSize: buffer.length,
         sig,
+        prepareMethod,
+        prepareFields: Object.keys(prepareFields || {}),
+        relMeta,
       });
     }
 
