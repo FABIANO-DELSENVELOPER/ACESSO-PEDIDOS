@@ -182,7 +182,7 @@ function xajaxObjectToXml(obj: Record<string, any>): string {
   return toXml(obj);
 }
 
-async function fetchRelatorio20Xlsx(dateStr: string): Promise<Buffer> {
+async function fetchRelatorio20Xlsx(dateStr: string): Promise<{ buffer: Buffer; contentType: string | null }> {
   const relatorioUrl = envOrDefault(
     "GESTOR_RELATORIO_URL",
     "https://www.gestorsistemas.inf.br/sistema/app/relatorio/?nCodigo_Relatorio=20"
@@ -254,7 +254,7 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<Buffer> {
   }
 
   const buf = Buffer.from(await res.arrayBuffer());
-  return buf;
+  return { buffer: buf, contentType: res.headers.get("content-type") };
 }
 
 async function importPedidos(pedidos: RelatorioPedido[]) {
@@ -337,9 +337,16 @@ export async function POST(req: Request) {
     const login = await loginGestor(false);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
-    const buffer = await fetchRelatorio20Xlsx(dateStr);
+    const { buffer, contentType } = await fetchRelatorio20Xlsx(dateStr);
     const pedidos = parseRelatorio20Xlsx(buffer);
-    if (pedidos.length === 0) return bad("Relatorio vazio ou layout desconhecido", 422);
+    if (pedidos.length === 0) {
+      const sig = buffer.subarray(0, 4).toString("hex");
+      return bad("Relatorio vazio ou layout desconhecido", 422, {
+        contentType,
+        bufferSize: buffer.length,
+        sig,
+      });
+    }
 
     const list = limit > 0 ? pedidos.slice(0, limit) : pedidos;
 
@@ -383,9 +390,16 @@ export async function GET(req: Request) {
     const login = await loginGestor(false);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
-    const buffer = await fetchRelatorio20Xlsx(dateStr);
+    const { buffer, contentType } = await fetchRelatorio20Xlsx(dateStr);
     const pedidos = parseRelatorio20Xlsx(buffer);
-    if (pedidos.length === 0) return bad("Relatorio vazio ou layout desconhecido", 422);
+    if (pedidos.length === 0) {
+      const sig = buffer.subarray(0, 4).toString("hex");
+      return bad("Relatorio vazio ou layout desconhecido", 422, {
+        contentType,
+        bufferSize: buffer.length,
+        sig,
+      });
+    }
 
     const { imported, skipped } = await importPedidos(pedidos);
     return NextResponse.json({
