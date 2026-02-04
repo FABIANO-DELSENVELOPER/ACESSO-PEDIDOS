@@ -5,7 +5,6 @@ import { requireAuth } from "@/lib/ops_guard";
 import { ajustarClienteVendaAoConsumidor } from "@/lib/obs_parse";
 import { fetchGestorWithSession, loginGestor } from "@/lib/gestor_session";
 import { parseRelatorio20Xlsx, type RelatorioPedido } from "@/lib/gestor_relatorio";
-import { read, utils } from "xlsx";
 
 export const runtime = "nodejs";
 
@@ -183,13 +182,7 @@ function xajaxObjectToXml(obj: Record<string, any>): string {
   return toXml(obj);
 }
 
-async function fetchRelatorio20Xlsx(dateStr: string): Promise<{
-  buffer: Buffer;
-  contentType: string | null;
-  relMeta: { hasForm1: boolean; hasXajax: boolean; looksLikeLogin: boolean };
-  prepareMethod: string;
-  prepareFields: Record<string, string>;
-}> {
+async function fetchRelatorio20Xlsx(dateStr: string): Promise<Buffer> {
   const relatorioUrl = envOrDefault(
     "GESTOR_RELATORIO_URL",
     "https://www.gestorsistemas.inf.br/sistema/app/relatorio/?nCodigo_Relatorio=20"
@@ -209,20 +202,12 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<{
 
   let { res: relRes } = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
   let relHtml = await relRes.text();
-  const relMeta = {
-    hasForm1: /<form[^>]*id=['"]form1['"]/i.test(relHtml),
-    hasXajax: /xajax_Relatorio|xajax\\.config/i.test(relHtml),
-    looksLikeLogin: new RegExp("input_usuario|login-form|/app/login/", "i").test(relHtml),
-  };
-  if (relMeta.looksLikeLogin) {
+  if (new RegExp("input_usuario|login-form|/app/login/", "i").test(relHtml)) {
     // sessão expirada/invalidada: força novo login e tenta de novo
     await loginGestor(true);
     const retry = await fetchGestorWithSession(relatorioUrl, { method: "GET", headers: baseHeaders });
     relRes = retry.res;
     relHtml = await relRes.text();
-    relMeta.hasForm1 = /<form[^>]*id=['"]form1['"]/i.test(relHtml);
-    relMeta.hasXajax = /xajax_Relatorio|xajax\\.config/i.test(relHtml);
-    relMeta.looksLikeLogin = new RegExp("input_usuario|login-form|/app/login/", "i").test(relHtml);
   }
 
   if (Object.keys(prepareFields).length > 0) {
@@ -291,13 +276,7 @@ async function fetchRelatorio20Xlsx(dateStr: string): Promise<{
   }
 
   const buf = Buffer.from(await res.arrayBuffer());
-  return {
-    buffer: buf,
-    contentType: res.headers.get("content-type"),
-    relMeta,
-    prepareMethod,
-    prepareFields,
-  };
+  return buf;
 }
 
 async function importPedidos(pedidos: RelatorioPedido[]) {
@@ -380,34 +359,9 @@ export async function POST(req: Request) {
     const login = await loginGestor(true);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
-  const { buffer, contentType, relMeta, prepareMethod, prepareFields } = await fetchRelatorio20Xlsx(dateStr);
+    const buffer = await fetchRelatorio20Xlsx(dateStr);
     const pedidos = parseRelatorio20Xlsx(buffer);
-    if (pedidos.length === 0) {
-      const sig = buffer.subarray(0, 4).toString("hex");
-      const debug = (() => {
-        try {
-          const wb = read(buffer, { type: "buffer", cellDates: false });
-          const sheetInfo = wb.SheetNames.map((name) => {
-            const sheet = wb.Sheets[name];
-            if (!sheet) return { name, rows: 0 };
-            const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
-            return { name, rows: rows.length, sample: rows.slice(0, 6) };
-          });
-          return sheetInfo;
-        } catch {
-          return [];
-        }
-      })();
-      return bad("Relatorio vazio ou layout desconhecido", 422, {
-        contentType,
-        bufferSize: buffer.length,
-        sig,
-        prepareMethod,
-        prepareFields: Object.keys(prepareFields || {}),
-        relMeta,
-        debug,
-      });
-    }
+    if (pedidos.length === 0) return bad("Relatorio vazio ou layout desconhecido", 422);
 
     const list = limit > 0 ? pedidos.slice(0, limit) : pedidos;
 
@@ -451,34 +405,9 @@ export async function GET(req: Request) {
     const login = await loginGestor(true);
     if (!login.ok) return bad(login.message, 401, { finalUrl: login.finalUrl });
 
-    const { buffer, contentType, relMeta, prepareMethod, prepareFields } = await fetchRelatorio20Xlsx(dateStr);
+    const buffer = await fetchRelatorio20Xlsx(dateStr);
     const pedidos = parseRelatorio20Xlsx(buffer);
-    if (pedidos.length === 0) {
-      const sig = buffer.subarray(0, 4).toString("hex");
-      const debug = (() => {
-        try {
-          const wb = read(buffer, { type: "buffer", cellDates: false });
-          const sheetInfo = wb.SheetNames.map((name) => {
-            const sheet = wb.Sheets[name];
-            if (!sheet) return { name, rows: 0 };
-            const rows = utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }) as unknown[][];
-            return { name, rows: rows.length, sample: rows.slice(0, 6) };
-          });
-          return sheetInfo;
-        } catch {
-          return [];
-        }
-      })();
-      return bad("Relatorio vazio ou layout desconhecido", 422, {
-        contentType,
-        bufferSize: buffer.length,
-        sig,
-        prepareMethod,
-        prepareFields: Object.keys(prepareFields || {}),
-        relMeta,
-        debug,
-      });
-    }
+    if (pedidos.length === 0) return bad("Relatorio vazio ou layout desconhecido", 422);
 
     const { imported, skipped } = await importPedidos(pedidos);
     return NextResponse.json({
