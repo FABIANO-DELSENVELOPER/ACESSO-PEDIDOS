@@ -291,6 +291,7 @@ async function importPedidos(pedidos: RelatorioPedido[]) {
     }
 
     const observacao = p.observacao || null;
+    const vendedor = p.vendedor || null;
     const ajustado = ajustarClienteVendaAoConsumidor(p.cliente_nome, "", observacao || undefined);
     const cliente_nome = (ajustado?.cliente_nome || p.cliente_nome || "Cliente").trim();
     const telefone = ajustado?.telefone || null;
@@ -298,10 +299,10 @@ async function importPedidos(pedidos: RelatorioPedido[]) {
     await q("begin");
     try {
       const ins = await q<any>(
-        `insert into orders (pedido_num, token, cliente_nome, telefone, status, agendado_para, observacao)
-         values ($1, $2, $3, $4, $5, $6, $7)
+        `insert into orders (pedido_num, token, cliente_nome, vendedor, telefone, status, agendado_para, observacao)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
          returning id, token`,
-        [p.pedido_num, cryptoRandomToken(), cliente_nome, telefone, "RECEBIDO", null, observacao]
+        [p.pedido_num, cryptoRandomToken(), cliente_nome, vendedor, telefone, "RECEBIDO", null, observacao]
       );
 
       const orderId = Number(ins.rows[0].id);
@@ -323,6 +324,7 @@ async function importPedidos(pedidos: RelatorioPedido[]) {
             pedido_num: p.pedido_num,
             itens: p.itens.length,
             cliente_nome,
+            vendedor,
             telefone,
             observacao,
             origem: "GESTOR_RELATORIO_20",
