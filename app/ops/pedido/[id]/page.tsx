@@ -208,6 +208,7 @@ export default function OpsEntregaParcialPage({
                     border: "1px solid #f59e0b",
                     borderRadius: 8,
                     background: "#fff7ed",
+                    color: "#3b1f5a",
                   }}
                 >
                   ⚠️
