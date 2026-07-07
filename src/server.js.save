@@ -1,0 +1,503 @@
+require("dotenv").config();
+
+const path = require("path");
+const fs = require("fs");
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const PDFDocument = require("pdfkit");
+const initSqlJs = require("sql.js");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || "127.0.0.1";
+const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
+const ROOT = path.join(__dirname, "..");
+const PUBLIC_DIR = path.join(ROOT, "public");
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const UPLOAD_DIR = process.env.UPLOAD_DIR || (IS_VERCEL ? path.join("/tmp", "vl-cristal-uploads") : path.join(PUBLIC_DIR, "uploads"));
+const DB_PATH = process.env.DATABASE_PATH || (IS_VERCEL ? path.join("/tmp", "vl-cristal.sqlite") : path.join(ROOT, "data", "vl-cristal.sqlite"));
+
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 6 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!/^image\/(png|jpe?g|webp)$/i.test(file.mimetype)) {
+      return cb(new Error("Formato de imagem nao suportado."));
+    }
+    cb(null, true);
+  }
+});
+
+let db;
+
+function signToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "8h" });
+}
+
+function normalizePhone(value = "") {
+  return String(value).replace(/\D/g, "");
+}
+
+function auth(role) {
+  return (req, res, next) => {
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (!token) return res.status(401).json({ error: "Token ausente." });
+
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      if (role && decoded.role !== role) return res.status(403).json({ error: "Acesso negado." });
+      req.user = decoded;
+      next();
+    } catch (_error) {
+      res.status(401).json({ error: "Token invalido." });
+    }
+  };
+}
+
+function normalizeParams(params) {
+  if (Array.isArray(params)) return params;
+  if (params === undefined) return [];
+  return Array.from(arguments);
+}
+
+function createDb(rawDb) {
+  function persist() {
+    fs.writeFileSync(DB_PATH, Buffer.from(rawDb.export()));
+  }
+
+  function query(sql, params, single) {
+    const stmt = rawDb.prepare(sql);
+    stmt.bind(normalizeParams(params));
+    const rows = [];
+    while (stmt.step()) rows.push(stmt.getAsObject());
+    stmt.free();
+    return single ? rows[0] : rows;
+  }
+
+  return {
+    exec(sql) {
+      rawDb.exec(sql);
+      persist();
+    },
+    get(sql) {
+      return query(sql, normalizeParams.apply(null, Array.prototype.slice.call(arguments, 1)), true);
+    },
+    all(sql) {
+      return query(sql, normalizeParams.apply(null, Array.prototype.slice.call(arguments, 1)), false);
+    },
+    run(sql) {
+      const params = normalizeParams.apply(null, Array.prototype.slice.call(arguments, 1));
+      const stmt = rawDb.prepare(sql);
+      stmt.run(params);
+      stmt.free();
+      const result = query("SELECT last_insert_rowid() AS lastID", [], true);
+      persist();
+      return { lastID: result?.lastID || 0 };
+    }
+  };
+}
+
+async function initDb() {
+  const SQL = await initSqlJs();
+  const rawDb = fs.existsSync(DB_PATH) ? new SQL.Database(fs.readFileSync(DB_PATH)) : new SQL.Database();
+  db = createDb(rawDb);
+  await db.exec("PRAGMA foreign_keys = ON");
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      whatsapp TEXT,
+      address TEXT,
+      city TEXT,
+      cep TEXT,
+      pool_type TEXT,
+      pool_volume TEXT,
+      notes TEXT,
+      next_visit TEXT,
+      monthly_value REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS service_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_date TEXT NOT NULL,
+      service_time TEXT NOT NULL,
+      client_id INTEGER NOT NULL,
+      employee TEXT NOT NULL,
+      service_done TEXT NOT NULL,
+      products_used TEXT,
+      technical_notes TEXT,
+      water_quality TEXT,
+      next_visit TEXT,
+      revenue REAL NOT NULL DEFAULT 0,
+      aspirou_fundo INTEGER NOT NULL DEFAULT 0,
+      escovou_paredes INTEGER NOT NULL DEFAULT 0,
+      limpeza_bordas INTEGER NOT NULL DEFAULT 0,
+      retrolavagem INTEGER NOT NULL DEFAULT 0,
+      aplicacao_cloro INTEGER NOT NULL DEFAULT 0,
+      ajuste_ph INTEGER NOT NULL DEFAULT 0,
+      aplicacao_algicida INTEGER NOT NULL DEFAULT 0,
+      limpeza_pre_filtro INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS photos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id INTEGER NOT NULL,
+      order_id INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('before', 'after')),
+      file_path TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+      FOREIGN KEY (order_id) REFERENCES service_orders(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS water_indicators (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL,
+      client_id INTEGER NOT NULL,
+      ph REAL,
+      free_chlorine REAL,
+      alkalinity REAL,
+      temperature REAL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+      FOREIGN KEY (order_id) REFERENCES service_orders(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS budgets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      city TEXT,
+      pool_type TEXT,
+      message TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  const admin = await db.get("SELECT id FROM users WHERE username = ?", "admin");
+  if (!admin) {
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
+    await db.run("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", "admin", passwordHash, "admin");
+  }
+}
+
+function parseChecklist(body) {
+  const keys = [
+    "aspirou_fundo",
+    "escovou_paredes",
+    "limpeza_bordas",
+    "retrolavagem",
+    "aplicacao_cloro",
+    "ajuste_ph",
+    "aplicacao_algicida",
+    "limpeza_pre_filtro"
+  ];
+  return Object.fromEntries(keys.map((key) => [key, body[key] ? 1 : 0]));
+}
+
+function orderSelect() {
+  return `
+    SELECT so.*, c.name AS client_name, c.phone AS client_phone, c.whatsapp AS client_whatsapp
+    FROM service_orders so
+    JOIN clients c ON c.id = so.client_id
+  `;
+}
+
+async function getOrderDetails(id) {
+  const order = await db.get(`${orderSelect()} WHERE so.id = ?`, id);
+  if (!order) return null;
+  order.photos = await db.all("SELECT * FROM photos WHERE order_id = ? ORDER BY created_at DESC", id);
+  order.water = await db.get("SELECT * FROM water_indicators WHERE order_id = ? ORDER BY created_at DESC LIMIT 1", id);
+  return order;
+}
+
+app.use(cors());
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static(UPLOAD_DIR));
+app.use(express.static(PUBLIC_DIR));
+app.use(async (_req, _res, next) => {
+  await ready;
+  next();
+});
+
+app.post("/api/auth/admin", async (req, res) => {
+  const { username, password } = req.body;
+  const user = await db.get("SELECT * FROM users WHERE username = ?", username);
+  if (!user || !(await bcrypt.compare(password || "", user.password_hash))) {
+    return res.status(401).json({ error: "Credenciais invalidas." });
+  }
+  res.json({ token: signToken({ sub: user.id, role: "admin", username: user.username }) });
+});
+
+app.post("/api/auth/client", async (req, res) => {
+  const login = normalizePhone(req.body.login);
+  const allClients = await db.all("SELECT * FROM clients");
+  const client = allClients.find((item) => {
+    const phone = normalizePhone(item.phone);
+    const whatsapp = normalizePhone(item.whatsapp);
+    return phone === login || whatsapp === login || `55${phone}` === login || `55${whatsapp}` === login;
+  });
+  if (!client) return res.status(401).json({ error: "Cliente nao encontrado." });
+  res.json({ token: signToken({ sub: client.id, role: "client", name: client.name }), client });
+});
+
+app.post("/api/budgets", async (req, res) => {
+  const { name, phone, city, pool_type, message } = req.body;
+  if (!name || !phone) return res.status(400).json({ error: "Nome e telefone sao obrigatorios." });
+  const result = await db.run(
+    "INSERT INTO budgets (name, phone, city, pool_type, message) VALUES (?, ?, ?, ?, ?)",
+    name,
+    phone,
+    city || "",
+    pool_type || "",
+    message || ""
+  );
+  res.status(201).json({ id: result.lastID });
+});
+
+app.get("/api/dashboard", auth("admin"), async (_req, res) => {
+  const [clients, orders, nextVisits, monthlyRevenue] = await Promise.all([
+    db.get("SELECT COUNT(*) AS total FROM clients"),
+    db.get("SELECT COUNT(*) AS total FROM service_orders"),
+    db.get("SELECT COUNT(*) AS total FROM clients WHERE next_visit IS NOT NULL AND date(next_visit) >= date('now')"),
+    db.get("SELECT COALESCE(SUM(revenue), 0) AS total FROM service_orders WHERE strftime('%Y-%m', service_date) = strftime('%Y-%m', 'now')")
+  ]);
+  res.json({
+    totalClients: clients.total,
+    poolsServed: clients.total,
+    servicesDone: orders.total,
+    nextVisits: nextVisits.total,
+    monthlyRevenue: monthlyRevenue.total
+  });
+});
+
+app.get("/api/clients", auth("admin"), async (_req, res) => {
+  res.json(await db.all("SELECT * FROM clients ORDER BY name"));
+});
+
+app.post("/api/clients", auth("admin"), async (req, res) => {
+  const { name, phone, whatsapp, address, city, cep, pool_type, pool_volume, notes, next_visit, monthly_value } = req.body;
+  if (!name || !phone) return res.status(400).json({ error: "Nome e telefone sao obrigatorios." });
+  const result = await db.run(
+    `INSERT INTO clients (name, phone, whatsapp, address, city, cep, pool_type, pool_volume, notes, next_visit, monthly_value)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    name,
+    phone,
+    whatsapp || "",
+    address || "",
+    city || "",
+    cep || "",
+    pool_type || "",
+    pool_volume || "",
+    notes || "",
+    next_visit || null,
+    Number(monthly_value || 0)
+  );
+  res.status(201).json(await db.get("SELECT * FROM clients WHERE id = ?", result.lastID));
+});
+
+app.put("/api/clients/:id", auth("admin"), async (req, res) => {
+  const { name, phone, whatsapp, address, city, cep, pool_type, pool_volume, notes, next_visit, monthly_value } = req.body;
+  await db.run(
+    `UPDATE clients SET name = ?, phone = ?, whatsapp = ?, address = ?, city = ?, cep = ?, pool_type = ?,
+     pool_volume = ?, notes = ?, next_visit = ?, monthly_value = ? WHERE id = ?`,
+    name,
+    phone,
+    whatsapp || "",
+    address || "",
+    city || "",
+    cep || "",
+    pool_type || "",
+    pool_volume || "",
+    notes || "",
+    next_visit || null,
+    Number(monthly_value || 0),
+    req.params.id
+  );
+  res.json(await db.get("SELECT * FROM clients WHERE id = ?", req.params.id));
+});
+
+app.delete("/api/clients/:id", auth("admin"), async (req, res) => {
+  await db.run("DELETE FROM clients WHERE id = ?", req.params.id);
+  res.status(204).end();
+});
+
+app.get("/api/orders", auth("admin"), async (_req, res) => {
+  res.json(await db.all(`${orderSelect()} ORDER BY so.service_date DESC, so.service_time DESC`));
+});
+
+app.post("/api/orders", auth("admin"), async (req, res) => {
+  const checklist = parseChecklist(req.body);
+  const result = await db.run(
+    `INSERT INTO service_orders (
+      service_date, service_time, client_id, employee, service_done, products_used, technical_notes,
+      water_quality, next_visit, revenue, aspirou_fundo, escovou_paredes, limpeza_bordas, retrolavagem,
+      aplicacao_cloro, ajuste_ph, aplicacao_algicida, limpeza_pre_filtro
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    req.body.service_date,
+    req.body.service_time,
+    req.body.client_id,
+    req.body.employee,
+    req.body.service_done,
+    req.body.products_used || "",
+    req.body.technical_notes || "",
+    req.body.water_quality || "",
+    req.body.next_visit || null,
+    Number(req.body.revenue || 0),
+    checklist.aspirou_fundo,
+    checklist.escovou_paredes,
+    checklist.limpeza_bordas,
+    checklist.retrolavagem,
+    checklist.aplicacao_cloro,
+    checklist.ajuste_ph,
+    checklist.aplicacao_algicida,
+    checklist.limpeza_pre_filtro
+  );
+
+  if (req.body.next_visit) {
+    await db.run("UPDATE clients SET next_visit = ? WHERE id = ?", req.body.next_visit, req.body.client_id);
+  }
+
+  await db.run(
+    "INSERT INTO water_indicators (order_id, client_id, ph, free_chlorine, alkalinity, temperature) VALUES (?, ?, ?, ?, ?, ?)",
+    result.lastID,
+    req.body.client_id,
+    Number(req.body.ph || 0),
+    Number(req.body.free_chlorine || 0),
+    Number(req.body.alkalinity || 0),
+    Number(req.body.temperature || 0)
+  );
+
+  res.status(201).json(await getOrderDetails(result.lastID));
+});
+
+app.post("/api/orders/:id/photos", auth("admin"), upload.fields([{ name: "before", maxCount: 1 }, { name: "after", maxCount: 1 }]), async (req, res) => {
+  const order = await db.get("SELECT * FROM service_orders WHERE id = ?", req.params.id);
+  if (!order) return res.status(404).json({ error: "Ordem nao encontrada." });
+
+  for (const kind of ["before", "after"]) {
+    const file = req.files?.[kind]?.[0];
+    if (file) {
+      await db.run(
+        "INSERT INTO photos (client_id, order_id, kind, file_path) VALUES (?, ?, ?, ?)",
+        order.client_id,
+        order.id,
+        kind,
+        `/uploads/${file.filename}`
+      );
+    }
+  }
+  res.status(201).json(await getOrderDetails(req.params.id));
+});
+
+app.get("/api/orders/:id/whatsapp", auth("admin"), async (req, res) => {
+  const order = await getOrderDetails(req.params.id);
+  if (!order) return res.status(404).json({ error: "Ordem nao encontrada." });
+  const portalLink = `${PUBLIC_BASE_URL}/cliente.html`;
+  const message = `Ola ${order.client_name}.\n\nSeu servico de manutencao foi concluido com sucesso.\n\nAcesse seu relatorio:\n\n${portalLink}\n\nVL Cristal Piscinas & Cia\nQualidade que se ve na transparencia.`;
+  const phone = normalizePhone(order.client_whatsapp || order.client_phone);
+  res.json({ message, url: `https://wa.me/55${phone}?text=${encodeURIComponent(message)}` });
+});
+
+app.get("/api/client/me", auth("client"), async (req, res) => {
+  const client = await db.get("SELECT * FROM clients WHERE id = ?", req.user.sub);
+  const orders = await db.all(`${orderSelect()} WHERE so.client_id = ? ORDER BY so.service_date DESC`, req.user.sub);
+  const photos = await db.all("SELECT p.* FROM photos p JOIN service_orders so ON so.id = p.order_id WHERE so.client_id = ? ORDER BY p.created_at DESC", req.user.sub);
+  const water = await db.all("SELECT * FROM water_indicators WHERE client_id = ? ORDER BY created_at ASC", req.user.sub);
+  res.json({ client, orders, photos, water });
+});
+
+app.get("/api/reports/pdf", auth("admin"), async (req, res) => {
+  const { period = "monthly", client_id } = req.query;
+  let where = "WHERE 1 = 1";
+  const params = [];
+
+  if (period === "weekly") where += " AND date(so.service_date) >= date('now', '-7 days')";
+  if (period === "monthly") where += " AND strftime('%Y-%m', so.service_date) = strftime('%Y-%m', 'now')";
+  if (client_id) {
+    where += " AND so.client_id = ?";
+    params.push(client_id);
+  }
+
+  const orders = await db.all(`${orderSelect()} ${where} ORDER BY so.service_date DESC`, params);
+  const doc = new PDFDocument({ margin: 48 });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename=relatorio-${period}.pdf`);
+  doc.pipe(res);
+
+  doc.fillColor("#0057B8").fontSize(20).text("VL Cristal Piscinas & Cia");
+  doc.fillColor("#333").fontSize(10).text("Qualidade que se ve na transparencia.");
+  doc.moveDown();
+  doc.fontSize(16).text("Relatorio de Servicos");
+  doc.fontSize(10).text(`Periodo: ${period === "weekly" ? "Semanal" : period === "monthly" ? "Mensal" : "Todos"}`);
+  doc.moveDown();
+
+  if (!orders.length) doc.text("Nenhum servico encontrado para os filtros selecionados.");
+  for (const order of orders) {
+    doc.fillColor("#0057B8").fontSize(12).text(`${order.service_date} ${order.service_time} - ${order.client_name}`);
+    doc.fillColor("#333").fontSize(10).text(`Responsavel: ${order.employee}`);
+    doc.text(`Servico: ${order.service_done}`);
+    doc.text(`Produtos: ${order.products_used || "-"}`);
+    doc.text(`Observacoes: ${order.technical_notes || "-"}`);
+    doc.text(`Qualidade da agua: ${order.water_quality || "-"}`);
+    doc.text(`Faturamento: R$ ${Number(order.revenue || 0).toFixed(2)}`);
+    doc.moveDown();
+  }
+
+  doc.end();
+});
+
+app.get("*", (req, res) => {
+  if (req.path.startsWith("/api/")) return res.status(404).json({ error: "Rota nao encontrada." });
+  res.sendFile(path.join(PUBLIC_DIR, "index.html"));
+});
+
+app.use((error, _req, res, _next) => {
+  console.error(error);
+  res.status(500).json({ error: error.message || "Erro interno." });
+});
+
+const ready = initDb();
+
+if (require.main === module) {
+  ready.then(() => {
+    app.listen(PORT, HOST, () => {
+      console.log(`VL Cristal Piscinas rodando em http://${HOST}:${PORT}`);
+    });
+  });
+}
+
+module.exports = app;
+nano src/server.js

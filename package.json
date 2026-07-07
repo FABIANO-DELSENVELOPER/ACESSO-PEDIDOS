@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "acocim-entregas",
   "version": "0.1.0",
   "private": true,
@@ -22,5 +23,43 @@
     "eslint-config-next": "16.0.10",
     "tailwindcss": "^4",
     "typescript": "^5"
+=======
+  "name": "vl-cristal-piscinas",
+  "version": "1.0.0",
+  "description": "Portal web para gerenciamento de clientes e servicos da VL Cristal Piscinas & Cia.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "piscinas",
+    "express",
+    "sqlite",
+    "jwt"
+  ],
+  "author": "VL Cristal Piscinas & Cia",
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.0.2",
+    "pdfkit": "^0.15.2",
+    "pg": "^8.21.0",
+    "sql.js": "^1.13.0",
+    "vercel": "^54.20.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  },
+  "engines": {
+    "node": ">=18"
+>>>>>>> 855552f (Atualizações do projeto VL)
   }
 }

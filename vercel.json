@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/server.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "node_modules/sql.js/dist/sql-wasm.wasm"
+        ]
+      }
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/assets/(.*)",
+      "dest": "/public/assets/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "src/server.js"
+    }
+  ]
+}

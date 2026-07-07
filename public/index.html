@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>VL Piscinas</title>
+
+  <link rel="stylesheet" href="/styles.css">
+
+  <!-- Supabase primeiro -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- seu JS depois -->
+  <script defer src="/app.js"></script>
+</head>
+<body>
+    <header class="site-header">
+      <a class="brand" href="/">
+        <img src="/assets/logo.png" alt="Logo VL Piscinas">
+        <span>
+          <strong>VL Piscinas</strong>
+          <span>Qualidade que se vê na transparência.</span>
+        </span>
+      </a>
+      <nav class="nav">
+        <a href="#servicos">Serviços</a>
+        <a href="#orcamento">Orçamento</a>
+        <a href="/cliente.html">Portal do Cliente</a>
+        <a href="/admin.html">Admin</a>
+        <button class="icon-btn" data-theme title="Alternar modo escuro">◐</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <h1>VL Piscinas</h1>
+          <p>Gestão premium de manutenção, limpeza e acompanhamento técnico para piscinas residenciais e comerciais, com histórico digital e relatórios transparentes para cada cliente.</p>
+          <div class="hero-actions">
+            <a class="btn" href="#orcamento">Solicitar orçamento</a>
+            <a class="btn secondary" href="/cliente.html">Acessar relatório</a>
+          </div>
+        </div>
+
+        <form id="budgetForm" class="budget-card">
+          <h2>Orçamento rápido</h2>
+          <p class="hint">Sem cadastro. Preencha apenas o que quiser e abra o WhatsApp automaticamente.</p>
+          <label>Nome <input name="name"></label>
+          <label>Telefone <input name="phone" required inputmode="tel" placeholder="(17) 98832-0003"></label>
+          <div class="field-row">
+            <label>Cidade <input name="city"></label>
+            <label>Tipo de piscina <input name="pool_type"></label>
+          </div>
+          <label>Mensagem <textarea name="message" placeholder="Conte como podemos ajudar"></textarea></label>
+          <div class="button-row">
+            <button class="btn" type="submit">Enviar orçamento pelo WhatsApp</button>
+            <a class="btn secondary" href="https://wa.me/5517988320003" target="_blank" rel="noreferrer">Abrir WhatsApp</a>
+          </div>
+          <p class="hint">Ou toque no ícone verde de WhatsApp para falar diretamente.</p>
+          <div id="budgetStatus" class="toast"></div>
+        </form>
+      </section>
+
+      <section id="servicos" class="section">
+        <h2>Serviços oferecidos</h2>
+        <p>Processo padronizado para limpeza, tratamento químico, acompanhamento da qualidade da água e registro fotográfico antes e depois da manutenção.</p>
+        <div class="grid">
+          <article class="card">
+            <div class="water-icon">≈</div>
+            <h3>Limpeza completa</h3>
+            <p>Aspiração, escovação, bordas, pré-filtro e retrolavagem com checklist técnico por visita.</p>
+          </article>
+          <article class="card">
+            <div class="water-icon">pH</div>
+            <h3>Controle da água</h3>
+            <p>Registro de pH, cloro livre, alcalinidade e temperatura com histórico visual no portal.</p>
+          </article>
+          <article class="card">
+            <div class="water-icon">✓</div>
+            <h3>Relatórios digitais</h3>
+            <p>Fotos antes/depois, observações técnicas, próxima visita e envio automático por WhatsApp.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="orcamento" class="section">
+        <h2>Portal profissional</h2>
+        <p>Clientes acompanham o histórico de serviços e a equipe administra cadastros, ordens, fotos, indicadores e relatórios em PDF por período ou cliente.</p>
+      </section>
+    </main>
+
+    <a class="whatsapp-float" href="https://wa.me/5517988320003" target="_blank" rel="noreferrer" aria-label="WhatsApp">WA</a>
+  </body>
+</html>

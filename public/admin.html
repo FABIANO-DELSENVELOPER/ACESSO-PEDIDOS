@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin | VL Piscinas</title>
+
+  <link rel="stylesheet" href="/styles.css">
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script defer src="/app.js"></script>
+  <script defer src="/admin.js"></script>
+</head>
+  <body>
+    <section id="loginScreen" class="login-page">
+      <form id="adminLogin" class="login-card">
+        <div class="brand">
+          <img src="/assets/logo.png" alt="Logo VL ">
+          <span>
+            <strong>VL Piscinas</strong>
+            <span>Área administrativa</span>
+          </span>
+        </div>
+        <label>Usuário <input name="username" value="admin" required></label>
+        <label>Senha <input name="password" type="password" required></label>
+        <button class="btn" type="submit">Entrar</button>
+        <div id="loginStatus" class="toast"></div>
+      </form>
+    </section>
+
+    <section id="adminApp" class="admin-layout">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="/assets/logo.png" alt="Logo VL ">
+          <span>
+            <strong>VL PISCINAS</strong>
+            <span>Painel de gestão</span>
+          </span>
+        </div>
+        <nav class="menu">
+          <button class="active" data-view-button="dashboard">⌁ Dashboard</button>
+          <button data-view-button="clients">☷ Clientes</button>
+          <button data-view-button="orders">☑ Ordens</button>
+          <button data-view-button="reports">▣ Relatórios</button>
+          <button data-view-button="photos">▧ Fotos</button>
+          <button data-view-button="settings">◐ Configurações</button>
+          <button data-view-button="stock">◈ Estoque</button>
+          
+        </nav>
+      </aside>
+
+      <main class="admin-main">
+        <header class="admin-topbar">
+          <div>
+            <strong>VL Piscinas</strong>
+            <span>Qualidade que se vê na transparência.</span>
+          </div>
+          <div>
+            <button class="icon-btn" data-theme title="Alternar modo escuro">◐</button>
+            <button id="logout" class="btn secondary">Sair</button>
+          </div>
+        </header>
+
+        <div class="admin-content">
+          <section id="dashboard" class="view active">
+            <h1>Dashboard</h1>
+            <div class="stats" id="stats"></div>
+            <div class="dashboard-grid">
+              <div class="card">
+                <h2>20 Produtos mais usados</h2>
+                <ol id="topProducts" class="top-list"></ol>
+              </div>
+              <div class="card">
+                <h2>10 Serviços mais usados</h2>
+                <ol id="topServices" class="top-list"></ol>
+              </div>
+            </div>
+          </section>
+
+          <section id="clients" class="view">
+            <div class="toolbar">
+              <h1>Clientes</h1>
+            </div>
+            <div class="split">
+              <form id="clientForm" class="card">
+                <input type="hidden" name="id">
+                <div class="field-row">
+                  <label>Nome <input name="nome" required></label>
+                  <label>Telefone <input name="telefone" required></label>
+                </div>
+                <div class="field-row">
+                  <label>WhatsApp <input name="whatsapp"></label>
+                  <label>CEP <input name="cep"></label>
+                </div>
+                <label>Endereço <input name="endereco"></label>
+                <div class="field-row">
+                  <label>Cidade <input name="cidade"></label>
+                  <label>Tipo de piscina <input name="tipo_piscina"></label>
+                </div>
+                <div class="field-row">
+                  <label>Volume da piscina <input name="volume_piscina"></label>
+                  <label>Qtd. produtos contratados <input name="quantidade_produtos_contratados" type="number" step="0.01"></label>
+                </div>
+                <label class="inline-check"><input type="checkbox" name="portal_habilitado"> Portal do cliente habilitado</label>
+                <label>Próxima visita <input name="next_visit" type="date"></label>
+                <label>Observações <textarea name="observacoes"></textarea></label>
+                <button class="btn" type="submit">Salvar cliente</button>
+                <div id="clientStatus" class="toast"></div>
+              </form>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Nome</th><th>Telefone</th><th>Cidade</th><th>Piscina</th><th>Ações</th></tr></thead>
+                  <tbody id="clientsTable"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="stock" class="view">
+
+  <h1>Controle de Estoque por Cliente</h1>
+
+  <div class="split">
+
+    <form id="stockForm" class="card">
+
+      <label>
+        Produto
+        <input name="produto" required>
+      </label>
+
+      <label>
+        Unidade
+        <select name="unidade">
+          <option>kg</option>
+          <option>L</option>
+          <option>un</option>
+        </select>
+      </label>
+
+      <button class="btn">
+        Salvar Produto
+      </button>
+
+    </form>
+
+    <div class="table-wrap">
+
+      <table>
+
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Produto</th>
+            <th>Saldo</th>
+          </tr>
+        </thead>
+
+        <tbody id="stockTable"></tbody>
+
+      </table>
+
+    </div>
+
+  </div>
+
+  <div class="card">
+    <h2>Estoque disponível do cliente</h2>
+    <form id="stockAdjustmentForm">
+      <div class="field-row">
+        <label>Cliente
+          <select name="client_id" id="stockClient">
+            <option value="">Selecione</option>
+          </select>
+        </label>
+        <label>Produto
+          <select name="produto_id" id="stockProduct">
+            <option value="">Selecione</option>
+          </select>
+        </label>
+      </div>
+      <div class="field-row">
+        <label>Estoque disponível <input name="quantity" type="number" step="0.01" required></label>
+        <label>Estoque mínimo <input name="minimum_quantity" type="number" step="0.01"></label>
+      </div>
+      <button class="btn" type="submit">Salvar estoque do cliente</button>
+      <div id="stockAdjustmentStatus" class="toast"></div>
+    </form>
+  </div>
+
+</section>
+          <section id="orders" class="view">
+            <h1>Ordens de Serviço</h1>
+            <div class="split">
+              <form id="orderForm" class="card">
+                <div class="field-row">
+                  <label>Data <input name="service_date" type="date" required></label>
+                  <label>Hora <input name="hora_servico" type="time" required></label>
+                </div>
+                <label>Cliente <select name="client_id" id="orderClient" required></select></label>
+                <label>Técnico Responsável<input name="tecnico_responsavel" required></label>
+                <label>Serviço realizado <textarea name="servico_realizado" required></textarea></label>
+                <div class="section-block">
+                  <h3>Produtos Utilizados</h3>
+                  <div class="field-row">
+                    <label>
+                      Produto
+                      <select id="produtoUtilizado">
+                        <option value="">Selecione</option>
+                      </select>
+                    </label>
+                    <label>
+                      Quantidade Utilizada
+                      <input id="quantidadeUtilizada" type="number" step="0.01">
+                    </label>
+                  </div>
+                  <button type="button" id="addProduto" class="btn secondary">Adicionar Produto</button>
+                  <div id="listaProdutos"></div>
+                  <input type="hidden" name="produtos_utilizados" id="productsUsed" value="">
+                </div>
+                <label>Observações técnicas <textarea name="observacoes_tecnicas"></textarea></label>
+                <div class="field-row">
+                  <label>Qualidade da água <input name="water_quality"></label>
+                  <label>Próxima visita <input name="next_visit" type="date"></label>
+                </div>
+                <label>pH <input name="ph" type="number" step="0.01"></label>
+                <div class="field-row">
+                  <label>Cloro livre <input name="free_chlorine" type="number" step="0.01"></label>
+                  <label>Alcalinidade <input name="alkalinity" type="number" step="0.01"></label>
+                </div>
+                <label>Temperatura <input name="temperature" type="number" step="0.1"></label>
+                <div class="checklist">
+                  <label><input type="checkbox" name="aspirou_fundo"> Aspirou fundo</label>
+                  <label><input type="checkbox" name="escovou_paredes"> Escovou paredes</label>
+                  <label><input type="checkbox" name="limpeza_bordas"> Limpeza de bordas</label>
+                  <label><input type="checkbox" name="retrolavagem"> Retrolavagem</label>
+                  <label><input type="checkbox" name="aplicacao_cloro"> Aplicação de cloro</label>
+                  <label><input type="checkbox" name="ajuste_ph"> Ajuste de pH</label>
+                  <label><input type="checkbox" name="aplicacao_algicida"> Aplicação de algicida</label>
+                  <label><input type="checkbox" name="limpeza_pre_filtro"> Limpeza do pré-filtro</label>
+                </div>
+                <button class="btn" type="submit">Registrar ordem</button>
+                <div id="orderStatus" class="toast"></div>
+              </form>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Data</th><th>Cliente</th><th>Responsável</th><th>Produtos</th><th>WhatsApp</th></tr></thead>
+                  <tbody id="ordersTable"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="reports" class="view">
+            <h1>Relatórios</h1>
+            <form id="reportForm" class="card">
+              <div class="field-row">
+                <label>Período
+                  <select name="period">
+                    <option value="monthly">Mensal</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+                <label>Cliente <select name="client_id" id="reportClient"><option value="">Todos</option></select></label>
+              </div>
+              <button class="btn" type="submit">Abrir PDF</button>
+            </form>
+          </section>
+
+          <section id="photos" class="view">
+            <h1>Fotos</h1>
+            <form id="photoForm" class="card">
+              <label>Ordem de serviço <select name="order_id" id="photoOrder" required></select></label>
+              <div class="field-row">
+                <label>Antes da limpeza <input name="before" type="file" accept="image/*"></label>
+                <label>Depois da limpeza <input name="after" type="file" accept="image/*"></label>
+              </div>
+              <button class="btn" type="submit">Enviar fotos</button>
+              <div id="photoStatus" class="toast"></div>
+            </form>
+            <div id="photoGallery" class="photos section"></div>
+          </section>
+
+          <section id="settings" class="view">
+            <h1>Configurações</h1>
+            <div class="card">
+              <p>Senha administrativa: defina `ADMIN_PASSWORD` no arquivo `.env` antes de iniciar o servidor.</p>
+              <p>URL pública para relatórios e WhatsApp: defina `PUBLIC_BASE_URL` no `.env`.</p>
+              <button class="btn secondary" data-theme>Alternar modo escuro</button>
+            </div>
+          </section>
+        </div>
+      </main>
+    </section>
+  </body>
+</html>

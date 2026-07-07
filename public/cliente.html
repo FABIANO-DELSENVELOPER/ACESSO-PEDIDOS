@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Portal do Cliente | VL Piscinas </title>
+    <link rel="stylesheet" href="/styles.css">
+    <script defer src="/app.js"></script>
+    <script defer src="/cliente.js"></script>
+  </head>
+  <body>
+    <section id="clientLoginScreen" class="login-page">
+      <form id="clientLogin" class="login-card">
+        <div class="brand">
+          <img src="/assets/logo.png" alt="Logo VL">
+          <span>
+            <strong>Portal do Cliente</strong>
+            <span>Histórico e relatórios da sua piscina</span>
+          </span>
+        </div>
+        <label>Telefone celular <input name="login" required inputmode="tel" autocomplete="tel"></label>
+        <label id="otpCodeField" hidden>Código SMS <input name="code" inputmode="numeric" autocomplete="one-time-code"></label>
+        <button class="btn" type="submit" id="clientLoginButton">Enviar código</button>
+        <a class="btn secondary" href="/">Voltar ao site</a>
+        <div id="clientLoginStatus" class="toast"></div>
+      </form>
+    </section>
+
+    <main id="clientApp" class="client-shell" hidden>
+      <header class="site-header">
+        <a class="brand" href="/">
+          <img src="/assets/logo.png" alt="Logo VL">
+          <span>
+            <strong>VL Piscinas</strong>
+            <span>Qualidade que se vê na transparência.</span>
+          </span>
+        </a>
+        <nav class="nav">
+          <button class="icon-btn" data-theme title="Alternar modo escuro">◐</button>
+          <button id="clientLogout" class="btn secondary">Sair</button>
+        </nav>
+      </header>
+
+      <section class="section">
+        <h1 id="clientName">Cliente</h1>
+        <div class="stats">
+          <div class="stat"><span>Próxima visita</span><strong id="nextVisit">-</strong></div>
+          <div class="stat"><span>Serviços realizados</span><strong id="serviceCount">0</strong></div>
+          <div class="stat"><span>Qualidade da água</span><strong id="waterQuality">-</strong></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Indicadores da água</h2>
+        <canvas id="waterChart" class="chart" width="900" height="280"></canvas>
+      </section>
+
+      <section class="section">
+        <h2>Relatórios técnicos das visitas</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Data</th><th>Serviço</th><th>Produtos</th><th>Observações</th><th>Qualidade</th></tr></thead>
+            <tbody id="clientOrders"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>Fotos por visita</h2>
+        <div id="clientPhotos" class="photos"></div>
+      </section>
+
+      <section class="section">
+        <h2>Controle de Estoque</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Produto</th><th>Estoque</th><th>Mínimo</th><th>Status</th></tr></thead>
+            <tbody id="clientStock"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
